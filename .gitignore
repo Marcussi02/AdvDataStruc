@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *.bin
 .venv/
+.ruff_cache/

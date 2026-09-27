@@ -1,21 +1,38 @@
 # Advanced Data Structures & Algorithms
 
-Implementations from the advanced algorithms unit of my **Computer Science degree at Monash University Malaysia**: string matching, suffix trees, compression, graphs and randomised number theory, written from first principles in Python.
+[![CI](https://github.com/Marcussi02/AdvDataStruc/actions/workflows/ci.yml/badge.svg)](https://github.com/Marcussi02/AdvDataStruc/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-> If you know, you know. 🧠
+Implementations from the advanced algorithms unit of my **Computer Science degree at Monash University Malaysia**: string matching, suffix trees, compression, graphs and randomised number theory, written from first principles in pure Python with no third-party dependencies.
 
-These are my coursework implementations, kept as they were written, with light tidying. Some are complete; others are honest drafts that capture where my thinking got to.
+Every algorithm is checked against a brute-force reference on randomised inputs.
 
 ## Contents
 
 | Topic | File | What it implements | Status |
 |---|---|---|---|
-| **String matching** | [`string-matching/modified_boyer_moore.py`](string-matching/modified_boyer_moore.py) | Boyer-Moore with **bad-character**, **good-suffix** and **matched-prefix** shift rules, with the preprocessing built on the **Z-algorithm** | 🟡 Z-algorithm works; full matcher in progress |
-| **Suffix trees** | [`suffix-trees/generalised_suffix_tree.py`](suffix-trees/generalised_suffix_tree.py) | Ukkonen-style **generalised suffix tree** (nodes, edges, global end pointer) | 🔴 Design sketch |
-| **Compression** | [`compression/myzip.py`](compression/myzip.py) | **LZ77** factorisation, **Huffman** coding and **Elias** universal integer codes, packed into a custom bit-level file format | 🟢 Encoder works |
-| | [`compression/myunzip.py`](compression/myunzip.py) | Decoder: header parsing, Elias and Huffman decoding, LZ77 reconstruction | 🟡 In progress |
-| **Graphs** | [`graphs/kruskal_mst.py`](graphs/kruskal_mst.py) | **Kruskal's MST** on a **disjoint-set / union-find** with union by height | 🟢 Union-find works · 🟡 Kruskal loop in progress |
-| **Number theory** | [`number-theory/three_primes.py`](number-theory/three_primes.py) | **Miller-Rabin** randomised primality test, used to write an odd number as a sum of three primes (weak Goldbach) | 🟢 Works |
+| **String matching** | [`string-matching/modified_boyer_moore.py`](string-matching/modified_boyer_moore.py) | Boyer-Moore with extended **bad-character**, **good-suffix** and **matched-prefix** rules; preprocessing built on the **Z-algorithm** | 🟢 Complete, tested |
+| **Suffix trees** | [`suffix-trees/generalised_suffix_tree.py`](suffix-trees/generalised_suffix_tree.py) | **Ukkonen's** linear-time **generalised suffix tree** (global end, active point, skip/count, suffix links), with substring search, occurrence listing and **longest common substring** | 🟢 Complete, tested |
+| **Compression** | [`compression/myzip.py`](compression/myzip.py) | **LZ77** factorisation (via the Z-algorithm), **Huffman** coding and **Elias omega** integer codes, packed into a custom bit-level file format | 🟢 Complete, tested |
+| | [`compression/myunzip.py`](compression/myunzip.py) | Decoder: header parsing, Elias and Huffman decoding, LZ77 reconstruction | 🟢 Complete, round-trip tested |
+| | [`compression/codec.py`](compression/codec.py) | Shared bit I/O and codecs | 🟢 |
+| **Graphs** | [`graphs/kruskal_mst.py`](graphs/kruskal_mst.py) | **Kruskal's MST** on a **union-find** with union by height and path compression | 🟢 Complete, tested |
+| **Number theory** | [`number-theory/three_primes.py`](number-theory/three_primes.py) | **Miller-Rabin** randomised primality test, used to write an odd number as a sum of three primes (weak Goldbach) | 🟢 Complete, tested |
+
+The first versions were written during the unit; some were unfinished drafts. I completed them later, fixed the bugs I found, and added the test suite.
+
+## Complexity
+
+| Algorithm | Time | Notes |
+|---|---|---|
+| Z-algorithm | O(n) | |
+| Boyer-Moore preprocessing | O(m + m·σ) | σ = pattern alphabet |
+| Boyer-Moore search | O(n/m) typical, O(nm) worst | |
+| Ukkonen suffix tree | O(n) construction | n = total length of all strings |
+| Longest common substring | O(n) | one bitmask per node |
+| Kruskal | O(E log E) | near-constant union-find |
+| Miller-Rabin | O(k log³ n) | error ≤ 4⁻ᵏ |
 
 ## Why this unit matters
 
@@ -30,14 +47,36 @@ These are the algorithms underneath tools used every day:
 
 ## Running
 
-Python 3.10+. The compression scripts need `bitarray`:
+Python 3.10+, standard library only.
 
 ```bash
-pip install bitarray
+# Boyer-Moore: prints 1-based match positions
+python string-matching/modified_boyer_moore.py text.txt pattern.txt
 
-python -c "import sys; sys.path.insert(0,'number-theory'); import three_primes as t; print(t.primeOfThree(31))"
-# [3, 5, 23]
+# Longest common substring of any number of strings
+python suffix-trees/generalised_suffix_tree.py banana ananas     # anana
 
-cd compression && python myzip.py samples/x.asc 6 4
-# writes samples/x.asc.bin
+# Compress and decompress (window 6, lookahead 4)
+cd compression
+python myzip.py samples/x.asc 6 4      # writes samples/x.asc.bin
+python myunzip.py samples/x.asc.bin    # restores x.asc
+cd ..
+
+# Minimum spanning tree: file is "V E" then E lines of "u v w"
+python graphs/kruskal_mst.py graph.txt
+
+# Odd number as a sum of three primes
+python number-theory/three_primes.py 31                          # 3 5 23
 ```
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+ruff check --select E,F --line-length 100 .
+```
+
+## License
+
+[MIT](LICENSE)

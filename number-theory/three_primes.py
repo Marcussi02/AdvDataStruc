@@ -1,64 +1,92 @@
+"""Write an odd number as a sum of three primes (weak Goldbach).
+
+Primality is tested with the randomised Miller-Rabin test.
+
+Usage::
+
+    python three_primes.py 31      # writes "3 5 23" to output_threeprimes.txt
+"""
+
 import random
 import sys
-# True = prime, False = composite
-def millerRabinRandomisedPrimality(n):
-    if n == 2 or n == 3:
-        return True
-    if n % 2 == 0 or n == 1:
+
+_SMALL_PRIMES = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37)
+
+
+def millerRabinRandomisedPrimality(n, k=20, rng=random):
+    """Return True if n is (very probably) prime, False if n is composite.
+
+    Each of the k rounds picks a random witness a in [2, n-2]. A composite n
+    survives one round with probability at most 1/4.
+    """
+    if n < 2:
         return False
-    s = 0
-    t = n - 1
+    for p in _SMALL_PRIMES:
+        if n % p == 0:
+            return n == p
+
+    # n - 1 = 2^s * t with t odd
+    s, t = 0, n - 1
     while t % 2 == 0:
-        s = s + 1
-        t = t//2
-    lstRandom = random.sample(range(2,n-1),n-3)
-    for i in range(n-3):
-        a = lstRandom[i]
-        if pow(a, n - 1, n) != 1:
-            return False
-        for j in range(1,s):
-            previous = pow(a, 2**(j-1)*t, n)
-            current = previous * previous % n
-            if current == 1:
+        s += 1
+        t //= 2
+
+    for _ in range(k):
+        a = rng.randrange(2, n - 1)
+        x = pow(a, t, n)
+        if x == 1 or x == n - 1:
+            continue
+        for _ in range(s - 1):
+            x = x * x % n
+            if x == n - 1:
                 break
-            if (current == 1) and abs(previous) != 1:
-                return False
+        else:
+            # never reached -1: a is a witness that n is composite
+            return False
     return True
 
-def primeOfThree(n):
-    if n <= 7 or n % 2 == 0:
+
+def primeOfThree(n, is_prime=millerRabinRandomisedPrimality):
+    """Return [p, q, r] with p <= q <= r, all prime and p + q + r == n.
+
+    Returns [] if n is not an odd number greater than 5. The search picks
+    the smallest possible p, then the smallest q, so the answer is
+    deterministic.
+    """
+    if n <= 5 or n % 2 == 0:
         return []
-    lstPrimes = []
-    for i in range(n):
-        if i%2 == 1 and millerRabinRandomisedPrimality(i):
-            lstPrimes.append(i)
-    for i in range(len(lstPrimes)):
-        for j in range(len(lstPrimes)):
-            for k in range(len(lstPrimes)):
-                if lstPrimes[i] + lstPrimes[j] + lstPrimes[k] == n:
-                    return [lstPrimes[i], lstPrimes[j], lstPrimes[k]]
-    # lstDP = [[0,[]] for _ in range(n+1)]
-    # lstDP[0][0] = 1    
-    # for i in range(len(lstPrimes)-1,-1,-1):
-    #     for j in range(len(lstDP)-1):
-    #         if lstPrimes[i] + lstDP[j][0] <= j and len(lstDP[j][1]) <= 3:
-    #             lstDP[j][1].append(lstPrimes[i])
-    #             lstDP[j][0] += lstPrimes[i]
-    # print(lstPrimes)
-    # print(lstDP)
-    # for i in range(len(lstPrimes)-1,-1,-1):
-    #     if lstPrimes[i] + lstDP[11-lstPrimes[i]][0] == 11 and len(lstDP[11-lstPrimes[i]][1]) == 2:
-    #         lstDP[11-lstPrimes[i]][1].append(lstPrimes[i])
-    #         return lstDP[11-lstPrimes[i]][1]
+    p = 2
+    while 3 * p <= n:
+        if is_prime(p):
+            q = p
+            while p + 2 * q <= n:
+                r = n - p - q
+                if is_prime(q) and is_prime(r):
+                    return [p, q, r]
+                q += 1
+        p += 1
     return []
 
-def outputFile(N):
-    f = open("output_threeprimes.txt", "w")
-    lst = primeOfThree(N)
-    output = "{0} {1} {2}".format(lst[0],lst[1],lst[2])
-    f.write(output)
-    f.close()
 
-# if __name__ == "__main__":
-#     argument_01 = sys.argv[1]
-#     outputFile(argument_01)
+def outputFile(N, path="output_threeprimes.txt"):
+    lst = primeOfThree(int(N))
+    with open(path, "w") as f:
+        f.write(" ".join(str(x) for x in lst))
+    return lst
+
+
+def main(argv):
+    if len(argv) != 2:
+        print("usage: python three_primes.py <odd number > 5>", file=sys.stderr)
+        return 1
+    result = outputFile(argv[1])
+    if not result:
+        print("no decomposition: input must be an odd number greater than 5",
+              file=sys.stderr)
+        return 1
+    print(*result)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

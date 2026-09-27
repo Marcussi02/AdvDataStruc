@@ -1,123 +1,120 @@
+"""Boyer-Moore string matching with bad-character, good-suffix and matched-prefix rules.
+
+All preprocessing is built on the Z-algorithm (Gusfield's formulation):
+
+- extended bad character: for each position k and character x, the rightmost
+  occurrence of x in pat[:k], so a mismatch shifts the pattern just far enough
+  to line that occurrence up with the mismatched text character
+- good suffix: from the Z-values of the reversed pattern, the rightmost other
+  copy of the matched suffix pat[k+1:] that is preceded by a different character
+- matched prefix: the longest suffix of pat[k:] that is also a prefix of pat,
+  used when the good suffix does not reappear, and after a full match
+
+The shift at a mismatch is the larger of the bad-character and good-suffix
+shifts, so the scan never skips an occurrence. Worst case O(nm) without Galil's
+optimisation; sublinear on typical text.
+
+    python modified_boyer_moore.py text.txt pattern.txt   # prints 1-based positions
+"""
+
 import sys
 
-def boyerMoore(txt, pat):
-    z = zalgro(txt)
-    bc = BC(pat)
-    gs = GS(pat)
-    mp = MP(pat,z)
+
+def zalgro(s: str) -> list[int]:
+    """z[i] = length of the longest substring starting at i that matches a prefix of s."""
+    n = len(s)
+    if n == 0:
+        return []
+    z = [0] * n
+    z[0] = n
+    left = right = 0  # current Z-box is s[left:right]
+    for i in range(1, n):
+        if i < right:  # inside a Z-box: reuse the value from the matching prefix position
+            z[i] = min(z[i - left], right - i)
+        while i + z[i] < n and s[z[i]] == s[i + z[i]]:  # extend explicitly past the box
+            z[i] += 1
+        if i + z[i] > right:
+            left, right = i, i + z[i]
+    return z
+
+
+def BC(pat: str) -> list[dict[str, int]]:
+    """bc[k][x] = rightmost index j < k with pat[j] == x (missing key means none).
+
+    Built left to right: each position inherits the table of the previous one,
+    updated with the character just passed. Stored as small dicts rather than a
+    full alphabet-by-length matrix, so any character set works.
+    """
+    table: list[dict[str, int]] = []
+    last: dict[str, int] = {}
+    for k, ch in enumerate(pat):
+        table.append(last)
+        last = {**last, ch: k}
+    return table
+
+
+def GS(pat: str) -> list[int]:
+    """gs[j] = end index p of the rightmost copy of the suffix pat[j:] that is not a
+    suffix of pat and is preceded by a different character; -1 if none. gs has m+1 entries."""
     m = len(pat)
-    n = len(txt)
-    i = 0
-    while i < n:
-        j = m - 1
-        while j >= 0:
-            #when k is index of mismatch, BC(k-BC[x]) or GS(m-GS[k+1]) whichever shift more, if GS[k+1] == 0, MP
-            #when pat is matched, m-MP[2]
-            if txt[i+j] == pat[j]:
-                j -= 1
-            else:
-                k = j-1
-                BCShift = bc[ord(pat[k])][k]
-                GSShift = gs[j]
-                if BCShift > GSShift:
-                    i = i + j - BCShift
-                    j = m - 1
-                else:
-                    if GS[k+1] == 0:
-                        q = MP[j]
-                        i = m - q
-                        j = i + m
-                    else: #GSShift
-                        suffStart = GSShift - 1
-                        suffEnd = GSShift - 1 - j
-                        i = i + m - GSShift
-                        j = m - 1
-            #BC GS MP
-        shift = 0
-        i += shift
+    # Z-values of the reversed pattern give, for each end position p, the length of
+    # the longest substring ending at p that is also a suffix of pat.
+    z_rev = zalgro(pat[::-1])
+    z_suffix = [z_rev[m - 1 - p] for p in range(m)]
+    gs = [-1] * (m + 1)
+    for p in range(m - 1):  # p = m-1 would be the suffix itself
+        length = z_suffix[p]
+        if length:
+            gs[m - length] = p  # later (larger) p overwrites: rightmost copy wins
+    return gs
+
+
+def MP(pat: str) -> list[int]:
+    """mp[k] = length of the longest suffix of pat[k:] that is also a prefix of pat."""
+    m = len(pat)
+    z = zalgro(pat)
+    mp = [0] * (m + 1)
+    for k in range(m - 1, -1, -1):
+        mp[k] = z[k] if z[k] + k == m else mp[k + 1]
+    return mp
+
+
+def boyerMoore(txt: str, pat: str) -> list[int]:
+    """0-based start positions of every occurrence of pat in txt."""
+    n, m = len(txt), len(pat)
+    if m == 0 or m > n:
+        return []
+    bc, gs, mp = BC(pat), GS(pat), MP(pat)
+    full_match_shift = m - mp[1] if m > 1 else 1
+    result = []
+    s = 0  # alignment of pat[0] in txt
+    while s <= n - m:
+        k = m - 1
+        while k >= 0 and pat[k] == txt[s + k]:  # compare right to left
+            k -= 1
+        if k < 0:
+            result.append(s)
+            s += full_match_shift
+            continue
+        bc_shift = k - bc[k].get(txt[s + k], -1)
+        if k == m - 1:
+            gs_shift = 1  # nothing matched yet, so there is no good suffix
+        elif gs[k + 1] >= 0:
+            gs_shift = m - 1 - gs[k + 1]
+        else:
+            gs_shift = m - mp[k + 1]
+        s += max(bc_shift, gs_shift, 1)
     return result
 
-def zalgro(txt):
-    zArray = [None] * len(txt)
-    zArray[0] = len(txt)
-    zBoxLeft = 0
-    zBoxRight = 0
-    for i in range(1, len(txt)):
-        if i > zBoxRight: #case 1
-            j = 0
-            while i+j < len(txt) and txt[i+j] == txt[j]:
-                j += 1
-            zBoxLeft = i
-            zBoxRight = j
-            zArray[i] = j
-        else: #case 2
-            k = zBoxRight - zBoxLeft - i
-            remaining = zBoxRight - i
-            if zArray[k] < remaining:
-                zArray[i] = zArray[k]
-            elif zArray[k] == remaining:
-                #start checking from string[i+remaining] with string[zArray[k]+1]
-                #if extends over zBox, create new zBox
-                j = 0
-                while txt[i+remaining+1+j] == txt[remaining+1+j]:
-                    j += 1
-                if zBoxRight < i + remaining + 1 + j:
-                    zBoxLeft = i
-                    zBoxRight = i + remaining + 1 + j
-                zArray[i] = remaining+j
-            else: #zArray[k] > remaining
-                zArray[i] = remaining
-    return zArray
 
-def BC(pat):
-    #bcMatrix[asciicode][posiiton]
-    m = len(pat)
-    bcMatrix = [[0 for _ in range(m)] for _ in range(95)]
-    for i in range(m-1, -1, -1): # length-1, length-2, length-3
-        charVal = ord(pat[i])-32
-        bcMatrix[charVal][i] = i
-        j = i+1
-        while j < m and bcMatrix[charVal][j] == 0:
-            bcMatrix[charVal][j] = i
-            j += 1
-    return bcMatrix
+def read_file(filename: str) -> str:
+    with open(filename, encoding="utf-8") as f:
+        return f.read().rstrip("\n")
 
-def GS(pat):
-    m = len(pat)
-    revZArray = [None for _ in range(m)]
-    revPat = pat[::-1]
-    zArray = zalgro(revPat)
-    for i in range(m):
-        revZArray[i] = zArray[m-1-i]
-    GSArray = [0 for _ in range(m+1)]
-    for p in range(m-1):
-        j = m - revZArray[p] + 1
-        GSArray[j] = p
-    return GSArray
 
-def MP(pat, zArray):
-    m = len(pat)
-    MPArray = [None for _ in range(m)]
-    for i in range(m-1,-1,-1):
-        if zArray[i] + i == m:
-            print(pat[i])
-            MPArray[i] = zArray[i]
-        else:
-            print(pat[i])
-            MPArray[i] = MPArray[i+1]
-    return MPArray
-
-def read_file(filename):
-    return filename
-
-def BM(txt, pat):
-    print("hello")
-
-# if __name__ == "__main__":
-#     argument_00 = sys.argv[0]
-#     argument_01 = sys.argv[1]
-#     argument_02 = sys.argv[2]
-
-#     BM(read_file(argument_01), read_file(argument_02))
-print(zalgro("aabxaabxcaabxaabxay"))
-print(MP("fefafafef",zalgro("fefafafef")))
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit("usage: python modified_boyer_moore.py <text file> <pattern file>")
+    text, pattern = read_file(sys.argv[1]), read_file(sys.argv[2])
+    for position in boyerMoore(text, pattern):
+        print(position + 1)
